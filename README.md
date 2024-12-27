@@ -8,8 +8,13 @@ wget -O install-tailscale.sh https://raw.githubusercontent.com/davidjrb/install-
 ```bash
 chmod +x install-tailscale.sh
 ```
-3. create a file called `tskey` that contains nothing but your tailscale key 
-
+3. insall nano and create a file called `tskey` containing your tailscale key:
+```bash
+opkg update && opkg install nano
+```
+```bash
+nano tskey
+```
 4. run the script:
 ```bash
 ./install-tailscale.sh
