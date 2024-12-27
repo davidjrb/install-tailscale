@@ -76,7 +76,7 @@ service tailscale start
 service tailscale enable
 tailscale up --authkey "$TSKEY"
 
-# Just remove the key file (no fancy secure delete)
+# Remove the key file
 rm -f ./tskey
 
 echo "Tailscale installation complete."
