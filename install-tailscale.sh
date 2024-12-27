@@ -30,100 +30,56 @@ get_hostname() {
     fi
 }
 
-# Print current hostname
-CURRENT_HOSTNAME="$(get_hostname)"
-echo "Current hostname: $CURRENT_HOSTNAME"
+echo "Current hostname: $(get_hostname)"
 
-# Ask if user wants to change the hostname (with timeout)
-CHANGE_HOSTNAME=$(read_with_timeout 30 \
-    "Would you like to change the hostname? This will require a reboot. (y/N): " \
-    "n")
-
+CHANGE_HOSTNAME=$(read_with_timeout 30 "Change hostname? (y/N): " "n")
 if [ "$CHANGE_HOSTNAME" = "y" ] || [ "$CHANGE_HOSTNAME" = "Y" ]; then
-
-    # Normal read for new hostname, no timeout
     read -p "Enter new hostname: " NEW_HOSTNAME
-
     if [ -n "$NEW_HOSTNAME" ]; then
-        echo "The system will reboot with the new hostname: $NEW_HOSTNAME"
-        read -p "Proceed? (y/N): " PROCEED
-
-        if [ "$PROCEED" = "y" ] || [ "$PROCEED" = "Y" ]; then
-            # Update hostname using UCI (OpenWrt)
-            uci set system.@system[0].hostname="$NEW_HOSTNAME"
-            uci commit system
-
-            # Update runtime hostname
-            echo "$NEW_HOSTNAME" > /proc/sys/kernel/hostname
-            sync
-
-            echo "Rebooting now..."
+        echo "Setting new hostname to $NEW_HOSTNAME..."
+        uci set system.@system[0].hostname="$NEW_HOSTNAME"
+        uci commit system
+        echo "$NEW_HOSTNAME" >/proc/sys/kernel/hostname
+        echo "Reboot now to apply hostname change? (y/N): "
+        read REBOOT_NOW
+        if [ "$REBOOT_NOW" = "y" ] || [ "$REBOOT_NOW" = "Y" ]; then
             reboot
             exit 0
         fi
     fi
 fi
 
-PROCEED_INSTALL=$(read_with_timeout 30 "Proceed with Tailscale installation? (Y/n): " "y")
+PROCEED_INSTALL=$(read_with_timeout 30 "Install Tailscale now? (Y/n): " "y")
 if [ "$PROCEED_INSTALL" = "n" ] || [ "$PROCEED_INSTALL" = "N" ]; then
     echo "Installation cancelled."
     exit 0
 fi
 
-# Check if tskey file exists
-if [ ! -f "./tskey" ]; then
-    echo "Error: tskey file not found in current directory"
+# Check if tskey file exists and read it
+if [ ! -f ./tskey ]; then
+    echo "Error: tskey file not found."
     exit 1
 fi
 
-# Read the auth key
 TSKEY=$(cat ./tskey)
 if [ -z "$TSKEY" ]; then
-    echo "Error: tskey file is empty"
+    echo "Error: tskey file is empty."
     exit 1
 fi
 
+# Basic install of Tailscale
 opkg update
 opkg install ca-bundle kmod-tun tailscale
 
+# Start Tailscale and log in
 service tailscale start
 service tailscale enable
-
 tailscale up --authkey "$TSKEY"
 
-# Securely remove the tskey file
-dd if=/dev/urandom of=./tskey bs=1 count=$(stat -c %s ./tskey) conv=notrunc 2>/dev/null
+# Just remove the key file (no fancy secure delete)
 rm -f ./tskey
 
-# Configure firewall for Tailscale
-echo "Configuring firewall for Tailscale..."
-uci add firewall zone
-uci set firewall.@zone[-1].name='tailscale'
-uci set firewall.@zone[-1].input='ACCEPT'
-uci set firewall.@zone[-1].output='ACCEPT'
-uci set firewall.@zone[-1].forward='ACCEPT'
-uci set firewall.@zone[-1].device='tailscale0'
-
-uci add firewall forwarding
-uci set firewall.@forwarding[-1].src='tailscale'
-uci set firewall.@forwarding[-1].dest='lan'
-
-uci add firewall forwarding
-uci set firewall.@forwarding[-1].src='lan'
-uci set firewall.@forwarding[-1].dest='tailscale'
-
-uci commit firewall
-/etc/init.d/firewall restart
-
-# Optional IP forwarding for subnet routing
-# echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf
-# echo 'net.ipv6.conf.all.forwarding = 1' >> /etc/sysctl.conf
-# sysctl -p /etc/sysctl.conf
-
-echo "Installation and configuration complete!"
-echo "The auth key file has been securely deleted."
+echo "Tailscale installation complete."
+echo "Key file removed."
 echo "Checking Tailscale status..."
-echo "--------------------------"
 tailscale status
-echo "--------------------------"
-echo "You can check connection status anytime with: tailscale status"
