@@ -12,7 +12,6 @@ read_with_timeout() {
     local result
 
     read -t "$timeout" -p "$prompt" result
-
     if [ $? -eq 0 ]; then
         echo "${result:-$default}"
     else
@@ -35,23 +34,30 @@ get_hostname() {
 CURRENT_HOSTNAME="$(get_hostname)"
 echo "Current hostname: $CURRENT_HOSTNAME"
 
-CHANGE_HOSTNAME=$(read_with_timeout 30 "Would you like to change the hostname? This will require a reboot. (y/n): " "n")
+# Ask if user wants to change the hostname (with timeout)
+CHANGE_HOSTNAME=$(read_with_timeout 30 \
+    "Would you like to change the hostname? This will require a reboot. (y/N): " \
+    "n")
+
 if [ "$CHANGE_HOSTNAME" = "y" ] || [ "$CHANGE_HOSTNAME" = "Y" ]; then
-    NEW_HOSTNAME=$(read_with_timeout 30 "Enter new hostname: " "")
+
+    # Normal read for new hostname, no timeout
+    read -p "Enter new hostname: " NEW_HOSTNAME
+
     if [ -n "$NEW_HOSTNAME" ]; then
         echo "The system will reboot with the new hostname: $NEW_HOSTNAME"
-        PROCEED=$(read_with_timeout 30 "Proceed? (y/n): " "n")
+        read -p "Proceed? (y/N): " PROCEED
+
         if [ "$PROCEED" = "y" ] || [ "$PROCEED" = "Y" ]; then
-            # Update hostname using UCI
+            # Update hostname using UCI (OpenWrt)
             uci set system.@system[0].hostname="$NEW_HOSTNAME"
             uci commit system
 
-            # Update runtime hostname so prompt changes immediately
+            # Update runtime hostname
             echo "$NEW_HOSTNAME" > /proc/sys/kernel/hostname
             sync
 
-            echo "Rebooting in 5 seconds..."
-            sleep 5
+            echo "Rebooting now..."
             reboot
             exit 0
         fi
